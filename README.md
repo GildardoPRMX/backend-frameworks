@@ -1,133 +1,133 @@
-# Task API con Express y TypeScript (EC1 F2 A3)
+# Task API: Conexión Segura con MongoDB Atlas y Diagnóstico (EC2 F1 A5)
 
-API REST para la gestión de tareas desarrollada con **Express**, **TypeScript**, **Node.js** y almacenamiento temporal en memoria. Práctica individual guiada para la asignatura *Programación Backend con Frameworks* (Universidad Estatal de Sonora).
-
----
-
-## 🏛️ Arquitectura por Capas
-
-El proyecto implementa una arquitectura modular limpia con estricta separación de responsabilidades:
-
-```
-Cliente (Postman / Browser)
-         │
-         ▼
-     [app.ts] ──► express.json(), Middlewares globales
-         │
-         ▼
-[task.routes.ts] ──► Enrutamiento HTTP (/api/tasks)
-         │
-         ▼
-[task.controller.ts] ──► Interpreta req.params / req.body, invoca servicio, responde JSON
-         │
-         ▼
-[task.service.ts] ──► Reglas de negocio puras, validación defensiva, AppError
-         │
-         ▼
-  [data/tasks.ts] ──► Arreglo en memoria (colección de tareas)
-```
-
-- **Rutas (`src/routes/`)**: Asocian métodos y URLs a los controladores.
-- **Controladores (`src/controllers/`)**: Manejan solicitudes y respuestas HTTP.
-- **Servicios (`src/services/`)**: Reglas de negocio independientes de Express.
-- **Modelos (`src/models/`)**: Definición de tipos e interfaces TypeScript.
-- **Datos (`src/data/`)**: Estructura de almacenamiento en memoria.
-- **Middlewares (`src/middlewares/`)**: Manejo centralizado de errores y rutas no encontradas (404).
-- **Errores (`src/errors/`)**: Clase `AppError` para errores operacionales con código HTTP.
+API REST para la gestión de tareas desarrollada con **Express 5**, **TypeScript**, **Node.js**, **Mongoose 8** y almacenamiento temporal en memoria para el CRUD. Actividad guiada **EC2 F1 A5** para la asignatura *Programación Backend con Frameworks* (Universidad Estatal de Sonora).
 
 ---
 
-## 📋 Contrato de la API
+## 🏛️ Arquitectura por Capas y Persistencia
+
+El proyecto prepara la infraestructura de base de datos conectando con **MongoDB Atlas** de forma segura mediante variables de entorno validadas en el arranque y un módulo de diagnóstico de salud:
+
+```
+Cliente (Postman / Frontend)
+         │
+         ▼
+    [requestContext] ──► Genera UUID en X-Request-Id y res.locals.requestId
+         │
+         ▼
+     [express.json()] ──► Parsea el cuerpo JSON
+         │
+         ├──► /health ────────► health.routes.ts ──► health.controller.ts:
+         │                      ├── GET / ────────► status: "ok"
+         │                      └── GET /database ► ping con MongoDB Atlas (200 o 503)
+         │
+         └──► /api/tasks ─────► task.routes.ts ──► validaciones con middlewares:
+                                ├── router.param('id', validateTaskId)
+                                ├── requireJson
+                                └── validateTaskTitle / validateCompletion
+                                         │
+                                         ▼
+                                task.controller.ts ──► task.service.ts ──► data/tasks.ts (en memoria)
+```
+
+---
+
+## 🛡️ Configuración Segura de Variables de Entorno
+
+La API valida en el arranque (`src/config/env.ts`) las variables requeridas antes de intentar conectar a la base de datos o abrir el puerto:
+
+| Variable | Descripción | Estado |
+|---|---|---|
+| `PORT` | Puerto local en el que escucha Express (ej. `3000`). | No secreta |
+| `MONGODB_URI` | Cadena de conexión `mongodb+srv://...` con credenciales y clúster. | **Secreta** (no se versiona) |
+| `MONGODB_DB_NAME` | Nombre de la base de datos del proyecto (`task_api`). | Configuración |
+
+---
+
+## 📋 Endpoints de la API
 
 | Método | Ruta | Código HTTP | Descripción |
 |:------:|:-----|:-----------:|:------------|
-| `GET` | `/health` | `200 OK` | Comprueba estado y disponibilidad del servidor. |
-| `GET` | `/api/tasks` | `200 OK` | Obtiene la lista de todas las tareas. |
-| `GET` | `/api/tasks/:id` | `200 OK` / `404 Not Found` | Obtiene una tarea específica por su ID. |
-| `POST` | `/api/tasks` | `201 Created` / `400 Bad Request` | Crea una nueva tarea (`{"title": "..."}`). |
-| `PATCH` | `/api/tasks/:id/complete` | `200 OK` / `404 Not Found` | Marca una tarea existente como completada. |
-| `PATCH` | `/api/tasks/:id` | `200 OK` / `400 Bad Request` / `404 Not Found` | *(Desafío)* Edita el título de una tarea existente. |
-| `DELETE` | `/api/tasks/:id` | `204 No Content` / `404 Not Found` | Elimina una tarea por su ID. |
+| `GET` | `/health` | `200 OK` | Comprueba estado del proceso del servidor (`status: "ok"`). |
+| `GET` | `/health/database` | `200 OK` / `503` | Diagnóstico de disponibilidad de MongoDB con comando `ping`. |
+| `GET` | `/api/tasks` | `200 OK` | Obtiene la lista de tareas en memoria. |
+| `GET` | `/api/tasks/:id` | `200 OK` / `400` / `404` | Obtiene una tarea específica por ID. |
+| `POST` | `/api/tasks` | `201 Created` / `400` / `415` / `422` | Crea una tarea nueva (`{"title": "..."}`). |
+| `PATCH` | `/api/tasks/:id/complete` | `200 OK` / `400` / `404` | Marca una tarea como completada. |
+| `PATCH` | `/api/tasks/:id/status` | `200 OK` / `400` / `404` / `415` / `422` | Actualiza el estado booleano (`{"completed": true}`). |
+| `PATCH` | `/api/tasks/:id` | `200 OK` / `400` / `404` / `415` / `422` | Edita el título de una tarea. |
+| `DELETE` | `/api/tasks/:id` | `204 No Content` / `400` / `404` | Elimina una tarea por su ID. |
 
 ---
 
-## 🚀 Requisitos y Configuración
+## 🛑 Desafío Individual: Cierre Ordenado (*Graceful Shutdown*)
 
-### Requisitos Previos
-- **Node.js** (v18 o superior)
-- **PNPM** (instalado de forma global o vía Corepack)
-- **Visual Studio Code**
-- **Git**
-- **Postman**
-
-### Instalación de dependencias
-
-```bash
-pnpm install
-```
-
-### Configuración del entorno
-Copie el archivo `.env.example` a `.env` (si aún no existe):
-
-```bash
-cp .env.example .env
-```
-
-El puerto por defecto es `3000`.
+Se implementó el cierre controlado del servidor en [`src/server.ts`](src/server.ts) y [`src/config/database.ts`](src/config/database.ts):
+- Al recibir las señales `SIGINT` (Ctrl+C) o `SIGTERM`, el servidor deja de aceptar nuevas conexiones HTTP (`server.close()`).
+- Se cierra de forma asíncrona la conexión activa con MongoDB Atlas (`mongoose.disconnect()`).
+- Se finaliza el proceso de forma limpia sin generar excepciones no controladas ni exponer detalles sensibles.
 
 ---
 
-## 💻 Comandos del Proyecto
+## 🚀 Comandos del Proyecto
 
 | Comando | Propósito |
 |---|---|
-| `pnpm dev` | Inicia el servidor en modo desarrollo con recarga automática (`tsx watch`). |
+| `pnpm dev` | Inicia el servidor en desarrollo con conexión a MongoDB Atlas y recarga automática (`tsx watch`). |
 | `pnpm check` | Comprueba tipos e integridad con el compilador de TypeScript (`tsc --noEmit`). |
-| `pnpm build` | Compila el código fuente TypeScript a JavaScript estándar en la carpeta `dist/`. |
+| `pnpm build` | Compila el código TypeScript a JavaScript en `dist/`. |
 | `pnpm start` | Ejecuta la versión compilada en producción con Node.js (`node dist/server.js`). |
 
 ---
 
-## 🧪 Pruebas con Postman
+## 🧪 Pruebas en Postman
 
-Se incluye la colección oficial de pruebas lista para importar en:
-📂 `postman/task-api-ec1-f2-a3.postman_collection.json`
+Se incluye la colección oficial en:
+📂 `postman/task-api-ec2-f1-a1.postman_collection.json`
 
-### Pasos para importar y ejecutar:
-1. Abra Postman y haga clic en **Import**.
-2. Seleccione el archivo `postman/task-api-ec1-f2-a3.postman_collection.json`.
+### Importación y ejecución:
+1. Abra Postman y seleccione **Import**.
+2. Cargue el archivo `postman/task-api-ec2-f1-a1.postman_collection.json`.
 3. Inicie el servidor con `pnpm dev`.
-4. Ejecute las solicitudes en el orden numerado (la creación de tarea actualiza automáticamente la variable `taskId`).
+4. Ejecute las peticiones en orden: pruebas de salud (`/health`, `/health/database`), regresión del CRUD y casos negativos.
 
 ---
 
 ## 📁 Estructura del Proyecto
 
 ```
-task-api-express/
+backend-frameworks/
 ├── src/
+│   ├── config/
+│   │   ├── database.ts
+│   │   └── env.ts
 │   ├── controllers/
+│   │   ├── health.controller.ts
 │   │   └── task.controller.ts
 │   ├── data/
 │   │   └── tasks.ts
 │   ├── errors/
 │   │   └── app-error.ts
 │   ├── middlewares/
-│   │   ├── error.middleware.ts
-│   │   └── not-found.middleware.ts
 │   ├── models/
 │   │   └── task.ts
 │   ├── routes/
+│   │   ├── health.routes.ts
 │   │   └── task.routes.ts
 │   ├── services/
+│   │   ├── database.service.ts
 │   │   └── task.service.ts
+│   ├── types/
 │   ├── app.ts
 │   └── server.ts
 ├── docs/
-│   ├── pruebas-api.md
-│   └── reflexion.md
+│   ├── pruebas-conexion-mongodb.md
+│   ├── reflexion-mongodb.md
+│   ├── pruebas-validacion.md
+│   └── reflexion-validacion.md
 ├── postman/
-│   └── task-api-ec1-f2-a3.postman_collection.json
+│   ├── task-api-ec2-f1-a1.postman_collection.json
+│   └── task-api-ec1-f3-a4.postman_collection.json
 ├── .env
 ├── .env.example
 ├── .gitignore
@@ -139,5 +139,5 @@ task-api-express/
 ---
 
 ## 📄 Evidencias y Documentación
-- **Registro de Pruebas**: [docs/pruebas-api.md](docs/pruebas-api.md)
-- **Reflexión Teórica**: [docs/reflexion.md](docs/reflexion.md)
+- **Registro de Pruebas con MongoDB Atlas**: [docs/pruebas-conexion-mongodb.md](docs/pruebas-conexion-mongodb.md)
+- **Reflexión sobre Conexión Segura**: [docs/reflexion-mongodb.md](docs/reflexion-mongodb.md)
